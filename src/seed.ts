@@ -73,7 +73,10 @@ const directoryLoader = new DirectoryLoader(
   },
 );
 
-const model = new Ollama({ model: defaults.SUMMARIZATION_MODEL });
+const model = new Ollama({ 
+  model: defaults.SUMMARIZATION_MODEL,
+  baseUrl: 'http://127.0.0.1:11434'
+});
 
 // prepares documents for summarization
 // returns already existing sources and new catalog records
@@ -158,9 +161,15 @@ async function seed() {
     const { skipSources, catalogRecords } = await processDocuments(rawDocs, catalogTable, overwrite || !catalogTableExists);
     const catalogStore = catalogRecords.length > 0 ? 
         await LanceDB.fromDocuments(catalogRecords, 
-            new OllamaEmbeddings({model: defaults.EMBEDDING_MODEL}), 
+            new OllamaEmbeddings({
+          model: defaults.EMBEDDING_MODEL,
+          baseUrl: 'http://127.0.0.1:11434'
+        }), 
             { mode: overwrite ? "overwrite" : undefined, uri: databaseDir, tableName: defaults.CATALOG_TABLE_NAME } as LanceDBArgs) :
-        new LanceDB(new OllamaEmbeddings({model: defaults.EMBEDDING_MODEL}), { uri: databaseDir, table: catalogTable});
+        new LanceDB(new OllamaEmbeddings({
+          model: defaults.EMBEDDING_MODEL,
+          baseUrl: 'http://127.0.0.1:11434'
+        }), { uri: databaseDir, table: catalogTable});
     console.log(catalogStore);
 
     console.log("Number of new catalog records: ", catalogRecords.length);
@@ -177,9 +186,15 @@ async function seed() {
     
     const vectorStore = docs.length > 0 ? 
         await LanceDB.fromDocuments(docs, 
-        new OllamaEmbeddings({model: defaults.EMBEDDING_MODEL}), 
+        new OllamaEmbeddings({
+          model: defaults.EMBEDDING_MODEL,
+          baseUrl: 'http://127.0.0.1:11434'
+        }), 
         { mode: overwrite ? "overwrite" : undefined, uri: databaseDir, tableName: defaults.CHUNKS_TABLE_NAME } as LanceDBArgs) :
-        new LanceDB(new OllamaEmbeddings({model: defaults.EMBEDDING_MODEL}), { uri: databaseDir, table: chunksTable });
+        new LanceDB(new OllamaEmbeddings({
+          model: defaults.EMBEDDING_MODEL,
+          baseUrl: 'http://127.0.0.1:11434'
+        }), { uri: databaseDir, table: chunksTable });
 
     console.log("Number of new chunks: ", docs.length);
     console.log(vectorStore);

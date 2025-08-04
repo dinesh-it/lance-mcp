@@ -17,10 +17,16 @@ export async function connectToLanceDB(databaseUrl: string, chunksTableName: str
     client = await lancedb.connect(databaseUrl);
 
     chunksTable = await client.openTable(chunksTableName);
-    chunksVectorStore = new LanceDB(new OllamaEmbeddings({model: defaults.EMBEDDING_MODEL}), { table: chunksTable })
+    chunksVectorStore = new LanceDB(new OllamaEmbeddings({
+      model: defaults.EMBEDDING_MODEL,
+      baseUrl: 'http://127.0.0.1:11434'
+    }), { table: chunksTable })
 
     catalogTable = await client.openTable(catalogTableName);
-    catalogVectorStore = new LanceDB(new OllamaEmbeddings({model: defaults.EMBEDDING_MODEL}), { table: catalogTable })
+    catalogVectorStore = new LanceDB(new OllamaEmbeddings({
+      model: defaults.EMBEDDING_MODEL,
+      baseUrl: 'http://127.0.0.1:11434'
+    }), { table: catalogTable })
 
   } catch (error) {
     console.error("LanceDB connection error:", error);

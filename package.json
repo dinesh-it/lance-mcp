@@ -39,9 +39,10 @@
   "devDependencies": {
     "@types/node": "^22.10.7",
     "shx": "^0.3.4",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
-  },  
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2"
+  },
   "overrides": {
     "@langchain/community": {
       "@lancedb/lancedb": "^0.15.0"
