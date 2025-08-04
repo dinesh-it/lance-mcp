@@ -1,0 +1,11 @@
+# Document conversion dependencies
+docx2pdf>=0.1.8
+python-pptx>=0.6.21
+pandas>=1.5.0
+openpyxl>=3.0.0
+reportlab>=3.6.0
+weasyprint>=58.0
+markdown>=3.4.0
+
+# Optional: for better RTF support
+striprtf>=0.0.26

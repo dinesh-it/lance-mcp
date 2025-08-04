@@ -12,12 +12,15 @@ import {
 import { Document } from "@langchain/core/documents";
 import { Ollama, OllamaEmbeddings } from "@langchain/ollama";
 import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { loadSummarizationChain } from "langchain/chains";
 import { BaseLanguageModelInterface, BaseLanguageModelCallOptions } from "@langchain/core/language_models/base";
 import { PromptTemplate } from "@langchain/core/prompts";
 import * as crypto from 'crypto';
-import * as defaults from './config'
+import * as defaults from './config';
+import { ImageProcessor, ImageProcessingResult } from './image-processor';
 
 const argv: minimist.ParsedArgs = minimist(process.argv.slice(2),{boolean: "overwrite"});
 
@@ -73,6 +76,8 @@ const directoryLoader = new DirectoryLoader(
   },
 );
 
+const imageProcessor = new ImageProcessor();
+
 const model = new Ollama({ 
   model: defaults.SUMMARIZATION_MODEL,
   baseUrl: 'http://127.0.0.1:11434'
@@ -113,7 +118,81 @@ async function processDocuments(rawDocs: any, catalogTable: lancedb.Table, skipE
     }
 
     return { skipSources, catalogRecords };
-}   
+}
+
+// Find all image files in the directory
+async function findImageFiles(dir: string): Promise<string[]> {
+    const imageFiles: string[] = [];
+    
+    async function scanDirectory(currentDir: string) {
+        const entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
+        
+        for (const entry of entries) {
+            const fullPath = path.join(currentDir, entry.name);
+            
+            if (entry.isDirectory()) {
+                await scanDirectory(fullPath);
+            } else if (entry.isFile() && imageProcessor.isSupportedImageFormat(fullPath)) {
+                imageFiles.push(fullPath);
+            }
+        }
+    }
+    
+    await scanDirectory(dir);
+    return imageFiles;
+}
+
+// Process images from PDFs and standalone image files
+async function processImages(rawDocs: Document[], skipSources: string[]): Promise<Document[]> {
+    const imageDocuments: Document[] = [];
+    const tempDir = path.join(os.tmpdir(), 'lance-mcp-images');
+    
+    try {
+        // Create temp directory
+        if (!fs.existsSync(tempDir)) {
+            await fs.promises.mkdir(tempDir, { recursive: true });
+        }
+        
+        console.log("Processing images from PDFs...");
+        // Process images from PDFs
+        const pdfSources = new Set();
+        for (const doc of rawDocs) {
+            if (!skipSources.includes(doc.metadata.source) && 
+                doc.metadata.source.toLowerCase().endsWith('.pdf')) {
+                pdfSources.add(doc.metadata.source);
+            }
+        }
+        
+        for (const pdfPath of pdfSources) {
+            console.log(`Extracting images from PDF: ${pdfPath}`);
+            const imageResults = await imageProcessor.processImagesFromPDF(pdfPath as string, tempDir);
+            const imageDocs = imageProcessor.resultsToDocuments(imageResults);
+            imageDocuments.push(...imageDocs);
+        }
+        
+        console.log("Processing standalone image files...");
+        // Process standalone image files
+        const imageFiles = await findImageFiles(filesDir);
+        for (const imagePath of imageFiles) {
+            console.log(`Processing image: ${imagePath}`);
+            const result = await imageProcessor.processStandaloneImageFile(imagePath, tempDir);
+            if (result) {
+                const imageDocs = imageProcessor.resultsToDocuments([result]);
+                imageDocuments.push(...imageDocs);
+            }
+        }
+        
+        console.log(`Processed ${imageDocuments.length} images total`);
+        
+    } catch (error) {
+        console.error('Error processing images:', error);
+    } finally {
+        // Clean up temp directory
+        await imageProcessor.cleanupTempFiles(tempDir);
+    }
+    
+    return imageDocuments;
+}
 
 async function seed() {
     validateArgs();
@@ -177,15 +256,24 @@ async function seed() {
     //remove skipped sources from rawDocs
     const filteredRawDocs = rawDocs.filter((doc: any) => !skipSources.includes(doc.metadata.source));
 
+    // Process images from PDFs and standalone image files
+    console.log("Processing images...");
+    const imageDocuments = await processImages(rawDocs, skipSources);
+
     console.log("Loading LanceDB vector store...")
     const splitter = new RecursiveCharacterTextSplitter({
         chunkSize: 500,
         chunkOverlap: 10,
       });
-    const docs = await splitter.splitDocuments(filteredRawDocs);
     
-    const vectorStore = docs.length > 0 ? 
-        await LanceDB.fromDocuments(docs, 
+    // Split text documents
+    const textDocs = await splitter.splitDocuments(filteredRawDocs);
+    
+    // Combine text documents with image documents
+    const allDocs = [...textDocs, ...imageDocuments];
+    
+    const vectorStore = allDocs.length > 0 ? 
+        await LanceDB.fromDocuments(allDocs, 
         new OllamaEmbeddings({
           model: defaults.EMBEDDING_MODEL,
           baseUrl: 'http://127.0.0.1:11434'
@@ -196,7 +284,9 @@ async function seed() {
           baseUrl: 'http://127.0.0.1:11434'
         }), { uri: databaseDir, table: chunksTable });
 
-    console.log("Number of new chunks: ", docs.length);
+    console.log("Number of new text chunks: ", textDocs.length);
+    console.log("Number of new image chunks: ", imageDocuments.length);
+    console.log("Total chunks: ", allDocs.length);
     console.log(vectorStore);
 }
 

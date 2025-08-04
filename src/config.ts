@@ -1,4 +1,5 @@
 export const EMBEDDING_MODEL = "nomic-embed-text";
 export const CATALOG_TABLE_NAME = "catalog";
 export const CHUNKS_TABLE_NAME = "chunks";
-export const SUMMARIZATION_MODEL = "llama3.2"
+export const SUMMARIZATION_MODEL = "llama3.2";
+export const VISION_MODEL = "llama3.2-vision";
